@@ -1,0 +1,66 @@
+services:
+  sonarqube:
+    image: sonarqube:community
+    container_name: sonarqube
+    depends_on:
+      sonarqube-db:
+        condition: service_healthy
+    environment:
+      SONAR_JDBC_URL: jdbc:postgresql://sonarqube-db:5432/sonar
+      SONAR_JDBC_USERNAME: sonar
+      SONAR_JDBC_PASSWORD: sonar
+      SONAR_WEB_SYSTEMPASSCODE: admin
+      SONAR_CORE_SERVERBASEURL: http://localhost:9000
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
+      - sonarqube_logs:/opt/sonarqube/logs
+    ports:
+      - "9000:9000"
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9000/api/system/status | grep -q '\"status\":\"UP\"'"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
+  sonarqube-db:
+    image: postgres:15
+    container_name: sonarqube-db
+    environment:
+      POSTGRES_USER: sonar
+      POSTGRES_PASSWORD: sonar
+      POSTGRES_DB: sonar
+    volumes:
+      - sonarqube_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sonar"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  sonarqube-setup:
+    image: python:3.11-slim
+    container_name: sonarqube-setup
+    depends_on:
+      sonarqube:
+        condition: service_healthy
+    volumes:
+      - ./setup-quality-gate.sh:/setup-quality-gate.sh:ro
+      - sonarqube_setup_done:/setup
+    entrypoint: ["/bin/bash", "/setup-quality-gate.sh"]
+    environment:
+      SONAR_URL: http://sonarqube:9000
+      SONAR_USER: admin
+      SONAR_PASSWORD: admin
+
+volumes:
+  sonarqube_data:
+  sonarqube_extensions:
+  sonarqube_logs:
+  sonarqube_db:
+  sonarqube_setup_done:
