@@ -57,6 +57,14 @@ services:
       SONAR_URL: http://sonarqube:9000
       SONAR_USER: admin
       SONAR_PASSWORD: admin
+      # PostgreSQL connection — used to reset the admin password hash on first boot
+      # (SonarQube 26.x generates a random initial admin password; we replace it with
+      # a known hash of "admin" so that API calls in this script work with admin:admin)
+      PGHOST: sonarqube-db
+      PGPORT: 5432
+      PGDATABASE: sonar
+      PGUSER: sonar
+      PGPASSWORD: sonar
 
 volumes:
   sonarqube_data:
