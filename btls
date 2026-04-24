@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# btls — Backend Team Local SonarQube CLI
+#
+# Usage:
+#   btls analyze     [options]   Run SAST analysis on the current project
+#   btls export-report [options] Export the HTML report for the current project
+#   btls help                    Show this help
+#
+# BTLS_HOME must point to the backend-team-local-sonarqube repository root.
+# It is set automatically by the installer; you can also override it manually.
+
+set -euo pipefail
+
+if [[ -z "${BTLS_HOME:-}" ]]; then
+  echo "[btls] ERROR: BTLS_HOME is not set. Re-run 'docker compose up -d' from the" >&2
+  echo "       backend-team-local-sonarqube directory to reinstall, or set BTLS_HOME" >&2
+  echo "       manually in your shell profile." >&2
+  exit 1
+fi
+
+COMMAND="${1:-help}"
+shift || true
+
+case "$COMMAND" in
+  analyze)
+    exec "${BTLS_HOME}/analyze.sh" "$@"
+    ;;
+  export-report)
+    exec "${BTLS_HOME}/export-report.sh" "$@"
+    ;;
+  help|--help|-h)
+    echo "btls — Backend Team Local SonarQube CLI"
+    echo ""
+    echo "Commands:"
+    echo "  analyze [options]        Run SAST analysis on the current directory"
+    echo "  export-report [options]  Export the HTML SAST report"
+    echo "  help                     Show this help"
+    echo ""
+    echo "Examples:"
+    echo "  cd ~/my-project && btls analyze"
+    echo "  btls analyze --type typescript --project-key my-api"
+    echo "  btls export-report --project-key my-api"
+    echo "  btls export-report --project-key my-api --output ./evidence/report.html"
+    echo ""
+    echo "BTLS_HOME: ${BTLS_HOME}"
+    ;;
+  *)
+    echo "[btls] Unknown command: '${COMMAND}'. Run 'btls help' for usage." >&2
+    exit 1
+    ;;
+esac

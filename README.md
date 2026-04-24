@@ -290,13 +290,62 @@ docker compose up -d
 cd ~/my-project
 
 # 3. Run the analysis
-~/backend-team-local-sonarqube/analyze.sh
+btls analyze
 
 # 4. Export the report
-~/backend-team-local-sonarqube/export-report.sh --project-key my-project
+btls export-report --project-key my-project
 
 # 5. Attach the generated HTML file to your Jira/Confluence task
 ```
+
+---
+
+## btls — global CLI command
+
+The repository includes a `btls` wrapper script that exposes `analyze` and `export-report` as subcommands so you can run them from any project directory without specifying the full path.
+
+### Installation (one-time)
+
+```bash
+# 1. Make ~/.local/bin available (skip if already in PATH)
+mkdir -p ~/.local/bin
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc   # or ~/.bashrc
+source ~/.zshrc
+
+# 2. Create the btls wrapper pointing to the repo
+BTLS_HOME="/path/to/backend-team-local-sonarqube"   # ← change this
+cat > ~/.local/bin/btls <<EOF
+#!/usr/bin/env bash
+export BTLS_HOME="${BTLS_HOME}"
+exec "\${BTLS_HOME}/btls" "\$@"
+EOF
+chmod +x ~/.local/bin/btls
+```
+
+> If you move the repository, update `BTLS_HOME` in `~/.local/bin/btls`.
+
+### Usage
+
+```bash
+# Analyze the project in the current directory
+cd /path/to/your/project
+btls analyze
+
+# Specify type or project key explicitly
+btls analyze --type typescript
+btls analyze --project-key my-api
+
+# Export the HTML report
+btls export-report --project-key my-api
+btls export-report --project-key my-api --output ./evidence/report.html --no-browser
+
+# Help
+btls help
+```
+
+---
+
+## Typical workflow
 
 ---
 
