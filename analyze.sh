@@ -203,26 +203,33 @@ case "$PROJECT_TYPE" in
     command -v npx  >/dev/null 2>&1 || { error "npx not found. Update Node.js."; exit 1; }
     run_typescript_coverage
     info "Starting SonarQube analysis with sonar-scanner..."
-    # Use local or global sonar-scanner
-    if ! command -v sonar-scanner &>/dev/null; then
-      info "sonar-scanner not found globally, falling back to npx..."
-      SCANNER_CMD="npx sonar-scanner"
-    else
-      SCANNER_CMD="sonar-scanner"
-    fi
-    # Look for LCOV coverage report
+    # Build sonar-scanner properties
     LCOV_OPTS=""
     if [[ -f "coverage/lcov.info" ]]; then
       LCOV_OPTS="-Dsonar.javascript.lcov.reportPaths=coverage/lcov.info"
     fi
-    $SCANNER_CMD \
-      -Dsonar.projectKey="${PROJECT_KEY}" \
-      -Dsonar.projectName="${PROJECT_KEY}" \
-      -Dsonar.host.url="${SONAR_URL}" \
-      -Dsonar.token="${SONAR_TOKEN}" \
-      -Dsonar.sources=src \
-      -Dsonar.exclusions="**/*.test.ts,**/*.spec.ts,**/node_modules/**" \
-      ${LCOV_OPTS}
+    # Prefer global sonar-scanner, then @sonar/scan (no Java needed), then legacy npx sonar-scanner
+    if command -v sonar-scanner &>/dev/null; then
+      SCANNER_CMD="sonar-scanner"
+      $SCANNER_CMD \
+        -Dsonar.projectKey="${PROJECT_KEY}" \
+        -Dsonar.projectName="${PROJECT_KEY}" \
+        -Dsonar.host.url="${SONAR_URL}" \
+        -Dsonar.token="${SONAR_TOKEN}" \
+        -Dsonar.sources=src \
+        -Dsonar.exclusions="**/*.test.ts,**/*.spec.ts,**/node_modules/**" \
+        ${LCOV_OPTS}
+    else
+      info "sonar-scanner not found globally, using @sonar/scan (no Java required)..."
+      npx --yes @sonar/scan \
+        -Dsonar.projectKey="${PROJECT_KEY}" \
+        -Dsonar.projectName="${PROJECT_KEY}" \
+        -Dsonar.host.url="${SONAR_URL}" \
+        -Dsonar.token="${SONAR_TOKEN}" \
+        -Dsonar.sources=src \
+        -Dsonar.exclusions="**/*.test.ts,**/*.spec.ts,**/node_modules/**" \
+        ${LCOV_OPTS}
+    fi
     ;;
 
   *)
