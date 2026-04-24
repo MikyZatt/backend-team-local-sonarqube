@@ -12,8 +12,19 @@ set -euo pipefail
 SONAR_URL="${SONAR_URL:-http://localhost:9000}"
 SONAR_USER="${SONAR_USER:-admin}"
 SONAR_PASSWORD="${SONAR_PASSWORD:-admin}"
-QG_NAME="Backend Team QG"
+QG_NAME="${QG_NAME:-Backend Team QG}"
 FLAG_FILE="/setup/quality_gate_configured"
+
+# -----------------------------------------------------------------------
+# Quality Gate thresholds (override via environment variables)
+# -----------------------------------------------------------------------
+QG_MAX_VIOLATIONS="${QG_MAX_VIOLATIONS:-10}"             # max total issues
+QG_MIN_HOTSPOTS_REVIEWED="${QG_MIN_HOTSPOTS_REVIEWED:-100}" # % security hotspots reviewed
+QG_MIN_COVERAGE="${QG_MIN_COVERAGE:-80}"                 # % line coverage
+QG_MAX_DUPLICATIONS="${QG_MAX_DUPLICATIONS:-15}"         # % duplicated lines
+QG_MAX_MAINTAINABILITY="${QG_MAX_MAINTAINABILITY:-1}"    # sqale_rating: 1=A 2=B 3=C 4=D 5=E
+QG_MAX_RELIABILITY="${QG_MAX_RELIABILITY:-3}"            # reliability_rating: 1=A … 5=E
+QG_MAX_SECURITY="${QG_MAX_SECURITY:-3}"                  # security_rating: 1=A … 5=E
 
 # -----------------------------------------------------------------------
 # Install dependencies (curl + postgresql-client) if needed
@@ -142,9 +153,17 @@ QG_NAME_RESP=$(curl -sf $AUTH -X POST \
 
 echo "[setup] Created Quality Gate: '${QG_NAME_RESP}'"
 
+# Helper: convert numeric rating (1-5) to letter (A-E) for log readability
+rating_label() {
+  case "$1" in
+    1) echo "A";; 2) echo "B";; 3) echo "C";; 4) echo "D";; 5) echo "E";; *) echo "$1";;
+  esac
+}
+
 # Helper: add a condition using gateName (SonarQube 10.x+ API)
 add_condition() {
   local metric="$1" op="$2" error="$3" desc="$4"
+
   curl -sf $AUTH -X POST \
     "${SONAR_URL}/api/qualitygates/create_condition" \
     -d "gateName=${QG_NAME// /+}&metric=${metric}&op=${op}&error=${error}" \
@@ -152,13 +171,13 @@ add_condition() {
   echo "[setup]   + condition: ${metric} ${op} ${error}  (${desc})"
 }
 
-add_condition "violations"                 "GT" "10"  "Issues <= 10"
-add_condition "security_hotspots_reviewed" "LT" "100" "Security Hotspots Reviewed = 100%"
-add_condition "coverage"                   "LT" "80"  "Coverage >= 80%"
-add_condition "duplicated_lines_density"   "GT" "15"  "Duplicated Lines <= 15%"
-add_condition "sqale_rating"               "GT" "1"   "Maintainability Rating <= A"
-add_condition "reliability_rating"         "GT" "3"   "Reliability Rating <= C"
-add_condition "security_rating"            "GT" "3"   "Security Rating <= C"
+add_condition "violations"                 "GT" "${QG_MAX_VIOLATIONS}"          "Issues <= ${QG_MAX_VIOLATIONS}"
+add_condition "security_hotspots_reviewed" "LT" "${QG_MIN_HOTSPOTS_REVIEWED}"   "Security Hotspots Reviewed >= ${QG_MIN_HOTSPOTS_REVIEWED}%"
+add_condition "coverage"                   "LT" "${QG_MIN_COVERAGE}"             "Coverage >= ${QG_MIN_COVERAGE}%"
+add_condition "duplicated_lines_density"   "GT" "${QG_MAX_DUPLICATIONS}"         "Duplicated Lines <= ${QG_MAX_DUPLICATIONS}%"
+add_condition "sqale_rating"               "GT" "${QG_MAX_MAINTAINABILITY}"      "Maintainability Rating <= $(rating_label ${QG_MAX_MAINTAINABILITY})"
+add_condition "reliability_rating"         "GT" "${QG_MAX_RELIABILITY}"          "Reliability Rating <= $(rating_label ${QG_MAX_RELIABILITY})"
+add_condition "security_rating"            "GT" "${QG_MAX_SECURITY}"             "Security Rating <= $(rating_label ${QG_MAX_SECURITY})"
 
 # -----------------------------------------------------------------------
 # Set as default Quality Gate

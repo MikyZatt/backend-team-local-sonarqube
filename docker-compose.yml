@@ -65,6 +65,18 @@ services:
       PGDATABASE: sonar
       PGUSER: sonar
       PGPASSWORD: sonar
+      # -----------------------------------------------------------------------
+      # Quality Gate thresholds — edit these values to tune the gate.
+      # Ratings use numeric values: 1=A, 2=B, 3=C, 4=D, 5=E
+      # -----------------------------------------------------------------------
+      QG_NAME: "Backend Team QG"
+      QG_MAX_VIOLATIONS: "10"           # max total issues allowed
+      QG_MIN_HOTSPOTS_REVIEWED: "100"   # % security hotspots that must be reviewed
+      QG_MIN_COVERAGE: "80"             # minimum line coverage %
+      QG_MAX_DUPLICATIONS: "15"         # maximum duplicated lines %
+      QG_MAX_MAINTAINABILITY: "1"       # sqale_rating threshold (1=A)
+      QG_MAX_RELIABILITY: "3"           # reliability_rating threshold (3=C)
+      QG_MAX_SECURITY: "3"              # security_rating threshold (3=C)
 
 volumes:
   sonarqube_data:
