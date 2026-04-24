@@ -2,6 +2,11 @@
 # setup-quality-gate.sh
 # Configures the Backend Team Quality Gate on SonarQube.
 # Idempotent: skips setup if already done (flag file in /setup volume).
+#
+# Compatible with SonarQube 26.x:
+# - Quality gates are identified by name (not numeric id, changed in SonarQube 10.x+)
+# - SonarQube 26.x generates a random initial admin password; this script resets it to
+#   "admin" via a direct PostgreSQL update so that the team can use admin:admin
 set -euo pipefail
 
 SONAR_URL="${SONAR_URL:-http://localhost:9000}"
@@ -10,9 +15,12 @@ SONAR_PASSWORD="${SONAR_PASSWORD:-admin}"
 QG_NAME="Backend Team QG"
 FLAG_FILE="/setup/quality_gate_configured"
 
-# Install curl if running inside the python:slim container used by docker-compose
-if ! command -v curl &>/dev/null; then
-  apt-get update -qq && apt-get install -y -qq curl
+# -----------------------------------------------------------------------
+# Install dependencies (curl + postgresql-client) if needed
+# -----------------------------------------------------------------------
+if ! command -v curl &>/dev/null || ! command -v psql &>/dev/null; then
+  apt-get update -qq
+  apt-get install -y -qq curl postgresql-client
 fi
 
 if [[ -f "$FLAG_FILE" ]]; then
@@ -20,6 +28,9 @@ if [[ -f "$FLAG_FILE" ]]; then
   exit 0
 fi
 
+# -----------------------------------------------------------------------
+# Wait for SonarQube to be ready
+# -----------------------------------------------------------------------
 echo "[setup] Waiting for SonarQube to be ready at $SONAR_URL ..."
 for i in $(seq 1 60); do
   STATUS=$(curl -sf "${SONAR_URL}/api/system/status" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || true)
@@ -36,16 +47,59 @@ if [[ "$STATUS" != "UP" ]]; then
   exit 1
 fi
 
-AUTH="-u ${SONAR_USER}:${SONAR_PASSWORD}"
+# -----------------------------------------------------------------------
+# Reset admin password to "admin" via PostgreSQL.
+#
+# SonarQube 26.x generates a random initial admin password and stores a
+# random PBKDF2 hash. The DefaultAdminCredentialsVerifierFilter blocks all
+# API calls when it detects the built-in default hash. Replacing the hash
+# with a freshly generated one for the same string "admin" makes the filter
+# treat it as a user-set password and stops blocking API calls.
+# -----------------------------------------------------------------------
+echo "[setup] Resetting admin password to 'admin' via PostgreSQL..."
+
+python3 - <<'PYEOF'
+import hashlib, os, base64, subprocess, sys
+
+password = "admin"
+salt_bytes = os.urandom(20)
+salt_b64   = base64.b64encode(salt_bytes).decode()
+dk         = hashlib.pbkdf2_hmac("sha512", password.encode("utf-8"), salt_bytes, 100000)
+hash_b64   = base64.b64encode(dk).decode()
+crypted    = f"100000${hash_b64}"
+
+sql = f"""
+UPDATE users SET
+  crypted_password = '{crypted}',
+  salt             = '{salt_b64}',
+  hash_method      = 'PBKDF2',
+  reset_password   = false
+WHERE login = 'admin';
+"""
+
+result = subprocess.run(
+    ["psql", "-v", "ON_ERROR_STOP=1", "-c", sql],
+    capture_output=True, text=True
+)
+if result.returncode != 0:
+    print(f"[setup] ERROR updating admin password:\n{result.stderr}", file=sys.stderr)
+    sys.exit(1)
+print("[setup] Admin password hash updated successfully.")
+PYEOF
 
 # -----------------------------------------------------------------------
-# Change default admin password if still "admin" (SonarQube 9+ forces it)
+# Verify authentication works
 # -----------------------------------------------------------------------
-echo "[setup] Ensuring admin credentials are set..."
-curl -sf $AUTH -X POST \
-  "${SONAR_URL}/api/users/change_password" \
-  -d "login=admin&previousPassword=admin&password=admin" \
-  >/dev/null 2>&1 || true
+echo "[setup] Verifying authentication..."
+HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+  -u "${SONAR_USER}:${SONAR_PASSWORD}" \
+  "${SONAR_URL}/api/qualitygates/list")
+if [[ "$HTTP_STATUS" != "200" ]]; then
+  echo "[setup] ERROR: Authentication failed (HTTP ${HTTP_STATUS}). Check SONAR_USER/SONAR_PASSWORD." >&2
+  exit 1
+fi
+
+AUTH="-u ${SONAR_USER}:${SONAR_PASSWORD}"
 
 # -----------------------------------------------------------------------
 # Set instance name
@@ -58,83 +112,53 @@ curl -sf $AUTH -X POST \
 
 # -----------------------------------------------------------------------
 # Create Quality Gate
+# NOTE: SonarQube 10.x+ uses name (not numeric id) to identify quality gates.
 # -----------------------------------------------------------------------
 echo "[setup] Creating Quality Gate '${QG_NAME}'..."
 
 # Delete existing QG with the same name if present (idempotency)
-EXISTING_ID=$(curl -sf $AUTH \
+EXISTING=$(curl -sf $AUTH \
   "${SONAR_URL}/api/qualitygates/list" \
   | python3 -c "
 import sys, json
 data = json.load(sys.stdin)
 for qg in data.get('qualitygates', []):
     if qg['name'] == '${QG_NAME}':
-        print(qg['id'])
+        print('found')
         break
 " 2>/dev/null || true)
 
-if [[ -n "$EXISTING_ID" ]]; then
-  echo "[setup] Found existing QG id=${EXISTING_ID}, deleting..."
+if [[ "$EXISTING" == "found" ]]; then
+  echo "[setup] Found existing QG '${QG_NAME}', deleting..."
   curl -sf $AUTH -X POST \
     "${SONAR_URL}/api/qualitygates/destroy" \
-    -d "id=${EXISTING_ID}" >/dev/null
+    -d "name=${QG_NAME// /+}" >/dev/null
 fi
 
-QG_ID=$(curl -sf $AUTH -X POST \
+QG_NAME_RESP=$(curl -sf $AUTH -X POST \
   "${SONAR_URL}/api/qualitygates/create" \
-  -d "name=${QG_NAME// /%20}" \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+  -d "name=${QG_NAME// /+}" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['name'])")
 
-echo "[setup] Created Quality Gate id=${QG_ID}"
+echo "[setup] Created Quality Gate: '${QG_NAME_RESP}'"
 
-# Issues <= 10 → fail if > 10
-curl -sf $AUTH -X POST \
-  "${SONAR_URL}/api/qualitygates/create_condition" \
-  -d "gateId=${QG_ID}&metric=violations&op=GT&error=10" \
-  >/dev/null
-echo "[setup]   + condition: violations GT 10 (Issues <= 10)"
+# Helper: add a condition using gateName (SonarQube 10.x+ API)
+add_condition() {
+  local metric="$1" op="$2" error="$3" desc="$4"
+  curl -sf $AUTH -X POST \
+    "${SONAR_URL}/api/qualitygates/create_condition" \
+    -d "gateName=${QG_NAME// /+}&metric=${metric}&op=${op}&error=${error}" \
+    >/dev/null
+  echo "[setup]   + condition: ${metric} ${op} ${error}  (${desc})"
+}
 
-# Security Hotspots Reviewed = 100%  → fail if < 100
-curl -sf $AUTH -X POST \
-  "${SONAR_URL}/api/qualitygates/create_condition" \
-  -d "gateId=${QG_ID}&metric=security_hotspots_reviewed&op=LT&error=100" \
-  >/dev/null
-echo "[setup]   + condition: security_hotspots_reviewed LT 100 (= 100%)"
-
-# Coverage >= 80% → fail if < 80
-curl -sf $AUTH -X POST \
-  "${SONAR_URL}/api/qualitygates/create_condition" \
-  -d "gateId=${QG_ID}&metric=coverage&op=LT&error=80" \
-  >/dev/null
-echo "[setup]   + condition: coverage LT 80 (>= 80%)"
-
-# Duplicated Lines % <= 15% → fail if > 15
-curl -sf $AUTH -X POST \
-  "${SONAR_URL}/api/qualitygates/create_condition" \
-  -d "gateId=${QG_ID}&metric=duplicated_lines_density&op=GT&error=15" \
-  >/dev/null
-echo "[setup]   + condition: duplicated_lines_density GT 15 (<= 15%)"
-
-# Maintainability Rating <= A (1) → fail if > 1
-curl -sf $AUTH -X POST \
-  "${SONAR_URL}/api/qualitygates/create_condition" \
-  -d "gateId=${QG_ID}&metric=sqale_rating&op=GT&error=1" \
-  >/dev/null
-echo "[setup]   + condition: sqale_rating GT 1 (Maintainability <= A)"
-
-# Reliability Rating <= C (3) → fail if > 3
-curl -sf $AUTH -X POST \
-  "${SONAR_URL}/api/qualitygates/create_condition" \
-  -d "gateId=${QG_ID}&metric=reliability_rating&op=GT&error=3" \
-  >/dev/null
-echo "[setup]   + condition: reliability_rating GT 3 (Reliability <= C)"
-
-# Security Rating <= C (3) → fail if > 3
-curl -sf $AUTH -X POST \
-  "${SONAR_URL}/api/qualitygates/create_condition" \
-  -d "gateId=${QG_ID}&metric=security_rating&op=GT&error=3" \
-  >/dev/null
-echo "[setup]   + condition: security_rating GT 3 (Security <= C)"
+add_condition "violations"                 "GT" "10"  "Issues <= 10"
+add_condition "security_hotspots_reviewed" "LT" "100" "Security Hotspots Reviewed = 100%"
+add_condition "coverage"                   "LT" "80"  "Coverage >= 80%"
+add_condition "duplicated_lines_density"   "GT" "15"  "Duplicated Lines <= 15%"
+add_condition "sqale_rating"               "GT" "1"   "Maintainability Rating <= A"
+add_condition "reliability_rating"         "GT" "3"   "Reliability Rating <= C"
+add_condition "security_rating"            "GT" "3"   "Security Rating <= C"
 
 # -----------------------------------------------------------------------
 # Set as default Quality Gate
@@ -142,12 +166,12 @@ echo "[setup]   + condition: security_rating GT 3 (Security <= C)"
 echo "[setup] Setting '${QG_NAME}' as default Quality Gate..."
 curl -sf $AUTH -X POST \
   "${SONAR_URL}/api/qualitygates/set_as_default" \
-  -d "id=${QG_ID}" \
+  -d "name=${QG_NAME// /+}" \
   >/dev/null
 
 # -----------------------------------------------------------------------
 # Mark as done
 # -----------------------------------------------------------------------
 mkdir -p /setup
-echo "${QG_ID}" > "$FLAG_FILE"
-echo "[setup] Done. Quality Gate configured successfully."
+echo "${QG_NAME}" > "$FLAG_FILE"
+echo "[setup] Done. Quality Gate '${QG_NAME}' configured and set as default."
