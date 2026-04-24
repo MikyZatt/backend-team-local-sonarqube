@@ -60,6 +60,8 @@ The instance will be available at **http://localhost:9000**
 
 **Credentials:** `admin` / `admin`
 
+> **Note:** SonarQube 26.x enforces a minimum password length of 12 characters. The default `admin` password works for API access (analysis, report export). If you change it via the UI you must use at least 12 characters and update `SONAR_USER`/`SONAR_PASSWORD` in your environment or pass them to the scripts.
+
 ### Status and logs
 
 ```bash
