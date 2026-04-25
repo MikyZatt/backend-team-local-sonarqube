@@ -56,7 +56,13 @@ The first startup takes about 2-3 minutes. Docker Compose will:
 2. Start SonarQube Community Edition
 3. Automatically run the initial configuration (team Quality Gate, instance name)
 
-The instance will be available at **http://localhost:9000**
+The instance will be available at **http://localhost:9000** (default port).
+
+> To use a different host port set `SONAR_PORT` before starting:
+> ```bash
+> SONAR_PORT=9001 docker compose up -d
+> # or add SONAR_PORT=9001 to a .env file in the repo root
+> ```
 
 **Credentials:** `admin` / `admin`
 
@@ -414,7 +420,8 @@ sudo sysctl -w vm.max_map_count=524288
 
 ```bash
 docker compose down
-# Or change the port in compose.yml: "9001:9000"
+# Change the host port by setting SONAR_PORT in your shell or in a .env file:
+# SONAR_PORT=9001  →  edit .env or run: SONAR_PORT=9001 docker compose up -d
 ```
 
 **Analysis fails with "Project not found"**
