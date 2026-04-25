@@ -81,9 +81,15 @@ docker compose down -v       # stop and delete all data
 
 ## Configuration
 
-All user-facing settings live in the **`.env`** file at the root of the repository.
-Edit it before running `docker compose up -d` (or re-apply it as described in
-[Quality Gate not configured](#quality-gate-not-configured)).
+All user-facing settings live in a **`.env`** file at the root of the repository.
+A template with all available variables and their defaults is provided as **`.env.example`**.
+
+On first use, copy the template and edit as needed:
+
+```bash
+cp .env.example .env
+# then edit .env
+```
 
 ```dotenv
 # Host port for SonarQube

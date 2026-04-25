@@ -1,0 +1,2 @@
+# Local configuration — copy .env.example to .env and edit as needed
+.env
