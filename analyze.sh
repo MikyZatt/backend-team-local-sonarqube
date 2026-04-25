@@ -17,7 +17,17 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(pwd)"
 
-SONAR_URL="${SONAR_URL:-http://localhost:9000}"
+# Load .env from the repository root if present (variables already set in the
+# environment take precedence, so existing shell exports are not overridden).
+if [[ -f "${SCRIPT_DIR}/.env" ]]; then
+  set -o allexport
+  # shellcheck source=/dev/null
+  source "${SCRIPT_DIR}/.env"
+  set +o allexport
+fi
+
+SONAR_PORT="${SONAR_PORT:-9000}"
+SONAR_URL="${SONAR_URL:-http://localhost:${SONAR_PORT}}"
 SONAR_USER="${SONAR_USER:-admin}"
 SONAR_PASSWORD="${SONAR_PASSWORD:-admin}"
 PROJECT_KEY=""
