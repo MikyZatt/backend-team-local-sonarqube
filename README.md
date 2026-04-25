@@ -79,6 +79,57 @@ docker compose down -v       # stop and delete all data
 
 ---
 
+## Running with Podman
+
+All commands work identically with Podman. Replace `docker` with `podman` throughout:
+
+```bash
+podman compose up -d
+podman compose ps
+podman compose logs -f
+podman compose down
+```
+
+### Prerequisites for Podman
+
+| Requirement | Notes |
+|---|---|
+| Podman | 4.0+ recommended |
+| podman-compose | `pip install podman-compose` — or use `podman compose` if your distro ships it |
+| Podman socket | Must be running so `podman-compose` can reach the API |
+
+### Enable the Podman socket
+
+**macOS (Podman Desktop or CLI):**
+
+```bash
+podman machine init   # only on first use
+podman machine start
+```
+
+**Linux (systemd):**
+
+```bash
+# User-level socket (no root required)
+systemctl --user enable --now podman.socket
+```
+
+### vm.max_map_count on Linux with Podman
+
+Elasticsearch (bundled in SonarQube) requires a high `vm.max_map_count`. With rootless Podman the setting must be applied on the **host**, not inside the container:
+
+```bash
+sudo sysctl -w vm.max_map_count=524288
+# To persist across reboots:
+echo "vm.max_map_count=524288" | sudo tee -a /etc/sysctl.conf
+```
+
+### Podman Desktop
+
+If you use [Podman Desktop](https://podman-desktop.io), the `podman compose` command is available from the integrated terminal and behaves identically to the steps above.
+
+---
+
 ## Analyzing a project
 
 The `analyze.sh` script must be run **from the root of the project** you want to analyze.
@@ -363,7 +414,7 @@ sudo sysctl -w vm.max_map_count=524288
 
 ```bash
 docker compose down
-# Or change the port in docker-compose.yml: "9001:9000"
+# Or change the port in compose.yml: "9001:9000"
 ```
 
 **Analysis fails with "Project not found"**
