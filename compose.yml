@@ -55,8 +55,8 @@ services:
     entrypoint: ["/bin/bash", "/setup-quality-gate.sh"]
     environment:
       SONAR_URL: http://sonarqube:9000
-      SONAR_USER: admin
-      SONAR_PASSWORD: admin
+      SONAR_USER: ${SONAR_USER:-admin}
+      SONAR_PASSWORD: ${SONAR_PASSWORD:-admin}
       # PostgreSQL connection — used to reset the admin password hash on first boot
       # (SonarQube 26.x generates a random initial admin password; we replace it with
       # a known hash of "admin" so that API calls in this script work with admin:admin)
@@ -66,17 +66,17 @@ services:
       PGUSER: sonar
       PGPASSWORD: sonar
       # -----------------------------------------------------------------------
-      # Quality Gate thresholds — edit these values to tune the gate.
+      # Quality Gate thresholds — configure in .env
       # Ratings use numeric values: 1=A, 2=B, 3=C, 4=D, 5=E
       # -----------------------------------------------------------------------
-      QG_NAME: "Backend Team QG"
-      QG_MAX_VIOLATIONS: "10"           # max total issues allowed
-      QG_MIN_HOTSPOTS_REVIEWED: "100"   # % security hotspots that must be reviewed
-      QG_MIN_COVERAGE: "80"             # minimum line coverage %
-      QG_MAX_DUPLICATIONS: "15"         # maximum duplicated lines %
-      QG_MAX_MAINTAINABILITY: "1"       # sqale_rating threshold (1=A)
-      QG_MAX_RELIABILITY: "3"           # reliability_rating threshold (3=C)
-      QG_MAX_SECURITY: "3"              # security_rating threshold (3=C)
+      QG_NAME: ${QG_NAME:-Backend Team QG}
+      QG_MAX_VIOLATIONS: ${QG_MAX_VIOLATIONS:-10}
+      QG_MIN_HOTSPOTS_REVIEWED: ${QG_MIN_HOTSPOTS_REVIEWED:-100}
+      QG_MIN_COVERAGE: ${QG_MIN_COVERAGE:-80}
+      QG_MAX_DUPLICATIONS: ${QG_MAX_DUPLICATIONS:-15}
+      QG_MAX_MAINTAINABILITY: ${QG_MAX_MAINTAINABILITY:-1}
+      QG_MAX_RELIABILITY: ${QG_MAX_RELIABILITY:-3}
+      QG_MAX_SECURITY: ${QG_MAX_SECURITY:-3}
 
 volumes:
   sonarqube_data:

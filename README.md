@@ -58,15 +58,9 @@ The first startup takes about 2-3 minutes. Docker Compose will:
 
 The instance will be available at **http://localhost:9000** (default port).
 
-> To use a different host port set `SONAR_PORT` before starting:
-> ```bash
-> SONAR_PORT=9001 docker compose up -d
-> # or add SONAR_PORT=9001 to a .env file in the repo root
-> ```
-
 **Credentials:** `admin` / `admin`
 
-> **Note:** SonarQube 26.x enforces a minimum password length of 12 characters. The default `admin` password works for API access (analysis, report export). If you change it via the UI you must use at least 12 characters and update `SONAR_USER`/`SONAR_PASSWORD` in your environment or pass them to the scripts.
+> **Note:** SonarQube 26.x enforces a minimum password length of 12 characters. The default `admin` password works for API access (analysis, report export). If you change it via the UI you must use at least 12 characters and update `SONAR_USER`/`SONAR_PASSWORD` in `.env`.
 
 ### Status and logs
 
@@ -81,6 +75,33 @@ docker compose logs sonarqube-setup  # Quality Gate setup logs
 ```bash
 docker compose down          # stop containers (data is preserved)
 docker compose down -v       # stop and delete all data
+```
+
+---
+
+## Configuration
+
+All user-facing settings live in the **`.env`** file at the root of the repository.
+Edit it before running `docker compose up -d` (or re-apply it as described in
+[Quality Gate not configured](#quality-gate-not-configured)).
+
+```dotenv
+# Host port for SonarQube
+SONAR_PORT=9000
+
+# Admin credentials
+SONAR_USER=admin
+SONAR_PASSWORD=admin
+
+# Quality Gate thresholds (ratings: 1=A  2=B  3=C  4=D  5=E)
+QG_NAME=Backend Team QG
+QG_MAX_VIOLATIONS=10
+QG_MIN_HOTSPOTS_REVIEWED=100
+QG_MIN_COVERAGE=80
+QG_MAX_DUPLICATIONS=15
+QG_MAX_MAINTAINABILITY=1   # A
+QG_MAX_RELIABILITY=3       # C
+QG_MAX_SECURITY=3          # C
 ```
 
 ---
@@ -322,17 +343,20 @@ The HTML report includes:
 
 ## Team Quality Gate
 
-The **"Backend Team QG"** Quality Gate is automatically configured on first startup with these thresholds:
+The **"Backend Team QG"** Quality Gate is automatically configured on first startup.
+Thresholds are defined in `.env` and applied at startup:
 
-| Metric                     | Threshold       |
-| -------------------------- | --------------- |
-| Total Issues               | ≤ 10            |
-| Security Hotspots Reviewed | = 100%          |
-| Code Coverage              | ≥ 80%           |
-| Duplicated Lines           | ≤ 15%           |
-| Maintainability Rating     | no worse than A |
-| Reliability Rating         | no worse than C |
-| Security Rating            | no worse than C |
+| Variable                    | Default | Meaning                                    |
+| --------------------------- | ------- | ------------------------------------------ |
+| `QG_MAX_VIOLATIONS`         | `10`    | Maximum total issues allowed               |
+| `QG_MIN_HOTSPOTS_REVIEWED`  | `100`   | % security hotspots that must be reviewed  |
+| `QG_MIN_COVERAGE`           | `80`    | Minimum line coverage %                    |
+| `QG_MAX_DUPLICATIONS`       | `15`    | Maximum duplicated lines %                 |
+| `QG_MAX_MAINTAINABILITY`    | `1`     | Maintainability rating (1=A … 5=E)         |
+| `QG_MAX_RELIABILITY`        | `3`     | Reliability rating (1=A … 5=E)             |
+| `QG_MAX_SECURITY`           | `3`     | Security rating (1=A … 5=E)                |
+
+To change the thresholds edit `.env` and [force a reconfiguration](#quality-gate-not-configured).
 
 ---
 
@@ -420,8 +444,9 @@ sudo sysctl -w vm.max_map_count=524288
 
 ```bash
 docker compose down
-# Change the host port by setting SONAR_PORT in your shell or in a .env file:
-# SONAR_PORT=9001  →  edit .env or run: SONAR_PORT=9001 docker compose up -d
+# Edit .env and change SONAR_PORT, then restart:
+# SONAR_PORT=9001
+docker compose up -d
 ```
 
 **Analysis fails with "Project not found"**
