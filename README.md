@@ -310,9 +310,15 @@ Or add to `package.json`:
   "jest": {
     "collectCoverage": true,
     "coverageDirectory": "coverage",
-    "coverageReporters": ["lcov", "text"]
+    "coverageReporters": ["lcov", "text"],
+    "testResultsProcessor": "jest-sonar-reporter"
   }
 }
+```
+
+If not done before, you have to install "jest-sonar-reporter"
+```bash
+npm i -D jest-sonar-reporter
 ```
 
 Then run:
